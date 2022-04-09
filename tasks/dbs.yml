@@ -1,0 +1,29 @@
+---
+# tasks file for mysql-databases
+
+- name: dbs | Create databases
+  delegate_to: "{{ mysql_host }}"
+  mysql_db:
+    login_unix_socket: "{{ mysql_socket }}"
+    name: "{{ item.value.db_name|default(item.key) }}"
+    state: present
+    collation: "{{ item.value.collation|default(mysql_db_default_collation) }}"
+    encoding: "{{ item.value.encoding|default(mysql_db_default_encoding) }}"
+  with_dict: "{{ mysql_databases }}"
+  register: created_dbs
+  notify:
+    - Ensure dump download directory exists
+    - Retrieve MySQL dump (from SSH)
+    - Retrieve MySQL dump (from URL)
+    - Retrieve MySQL dump (from local copy)
+    - Import MySQL dump from synced server
+    - Import MySQL dump from remote sql
+
+- name: dbs | set fact user
+  set_fact:
+    mysql_users: "{{ mysql_users + [{ 'user': item.value.user|default(item.key), 'password': item.value.password|default(''), 'state': item.value.state|default('present'), 'host': item.value.host|default(omit), 'hosts': item.value.hosts|default(omit),  'priv':  item.value.db_name|default(item.key) + '.*:ALL' }] }}"
+  when: item.value.user is defined
+  with_dict: "{{ mysql_databases }}"
+
+- name: dbs | Run hanlders
+  meta: flush_handlers

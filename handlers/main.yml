@@ -1,0 +1,64 @@
+---
+# handlers file for mysql-provider
+
+- name: "Ensure dump download directory exists"
+  file:
+    name: /var/tmp/{{ item.value.db_name|default(item.key) }}
+    state: directory
+  when:
+    - item.value.sync_source is defined
+  with_dict: "{{ mysql_databases }}"
+
+- name: Retrieve MySQL dump (from SSH)
+  copy:
+    src: "{{ item.item.value.sync_source.src }}"
+    dest: "/var/tmp/{{ item.item.value.db_name|default(item.item.key) }}/{{ item.item.value.sync_source.file|default(item.item.value.sync_source.src|basename) }}"
+    remote_src: true
+  delegate_to: "{{ item.item.value.sync_source.host }}"
+  when:
+     - item.item.value.sync_source is defined
+     - item.item.value.sync_source.host is defined
+  with_items: '{{ created_dbs.results }}'
+
+- name: Retrieve MySQL dump (from URL)
+  get_url:
+    dest: "/var/tmp/{{ item.db|default(item.key) }}/{{ item.item.value.sync_source.file }}"
+    url:  "{{ item.item.value.sync_source.url }}"
+  when:
+    - item.item.value.sync_source is defined
+    - item.item.value.sync_source.url is defined
+  with_items: '{{ created_dbs.results }}'
+
+- name: Retrieve MySQL dump (from local copy)
+  copy:
+    src:  "{{ item.item.value.sync_source.src }}"
+    dest: "/var/tmp/{{ item.db|default(item.key) }}/{{ item.item.value.sync_source.file|default(item.item.value.sync_source.src|basename) }}"
+  when:
+    - item.item.value.sync_source is defined
+    - item.item.value.sync_source.host is not defined
+    - item.item.value.sync_source.src is defined
+  with_items: '{{ created_dbs.results }}'
+
+- name: Import MySQL dump from synced server
+  delegate_to: "{{ mysql_host }}"
+  mysql_db:
+    login_unix_socket: "{{ mysql_socket }}"
+    name: "{{ item.db }}"
+    state: import
+    target: "/var/tmp/{{ item.db|default(item.key) }}/{{ item.item.value.sync_source.file|default(item.item.value.sync_source.src|basename) }}"
+  when:
+     - item.item.value.sync_source is defined
+     - item.item.value.sync_source.src is defined
+  with_items: "{{ created_dbs.results }}"
+
+- name: Import MySQL dump from remote sql
+  delegate_to: "{{ mysql_host }}"
+  mysql_db:
+    login_unix_socket: "{{ mysql_socket }}"
+    name: "{{ item.db|default(item.key) }}"
+    state: import
+    target: "{{ item.item.value.sync_source.target }}"
+  when:
+    - item.item.value.sync_source is defined
+    - item.item.value.sync_source.target is defined
+  with_items: "{{ created_dbs.results }}"

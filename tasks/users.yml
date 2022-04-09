@@ -1,0 +1,16 @@
+---
+
+# Create mysql users
+- name: users | Create mysql user
+  delegate_to: "{{ mysql_host }}"
+  mysql_user:
+    login_unix_socket: "{{ mysql_socket }}"
+    name: "{{ user.user }}"
+    password: "{{ user.password|default(omit) }}"
+    host: "{{ host }}"
+    priv: "{{ user.priv|default(omit) }}"
+    state: "{{ user.state | default('present') }}"
+    update_password: "{% if user.password is defined and user.password | length > 0 %}always{% else %}on_create{% endif %}"
+  loop: "{{ user.hosts|default([user.host|default(['%', 'localhost'])]) | flatten }}"
+  loop_control:
+    loop_var: host
